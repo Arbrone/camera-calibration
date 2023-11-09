@@ -2,7 +2,6 @@ import cv2
 import os
 import argparse
 import numpy as np
-from pathlib import Path
 import glob
 import pickle
 
@@ -11,8 +10,7 @@ def capture_images(device, name):
     if not os._exists(save):
         os.makedirs(save,exist_ok=True)
 
-    # TODO : change by device id or path
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(device)
     cpt = 0
     
     while(True): 
@@ -38,53 +36,58 @@ def capture_images(device, name):
     cv2.destroyAllWindows() 
 
 
-def calibration(name):
-    save = f'{calibration}/name'
+def calibration(name, rows, columns):
+    save = f'calibration/{name}'
     if not os._exists(save):
         os.makedirs(save,exist_ok=True)
-        
+
+    rows = rows
+    columns = columns
+    world_scaling = 1.
+            
     # termination criteria
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
     # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
-    objp = np.zeros((6*7,3), np.float32)
-    objp[:,:2] = np.mgrid[0:7,0:6].T.reshape(-1,2)
+    objp = np.zeros((rows*columns,3), np.float32)
+    objp[:,:2] = np.mgrid[0:rows,0:columns].T.reshape(-1,2)
     # Arrays to store object points and image points from all the images.
     objpoints = [] # 3d point in real world space
     imgpoints = [] # 2d points in image plane.
-    images = glob.glob('./images/*.jpg')
+    images = glob.glob(f'./images/{name}/*')
+    height,width = 0,0
     for fname in images:
         img = cv2.imread(fname)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        height,width = gray.shape
         # Find the chess board corners
-        ret, corners = cv2.findChessboardCorners(gray, (7,6), None)
-        print(ret)
+        ret, corners = cv2.findChessboardCorners(gray, (rows,columns), None)
         # If found, add object points, image points (after refining them)
         if ret == True:
             objpoints.append(objp)
             corners2 = cv2.cornerSubPix(gray,corners, (11,11), (-1,-1), criteria)
             imgpoints.append(corners2)
             # Draw and display the corners
-            cv2.drawChessboardCorners(img, (7,6), corners2, ret)
+            cv2.drawChessboardCorners(img, (rows,columns), corners2, ret)
             cv2.imshow('img', img)
             cv2.waitKey(500)
     cv2.destroyAllWindows()
 
-    retval, cameraMatrix, distCoeffs, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, imageSize)
+    retval, cameraMatrix, distCoeffs, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, (height,width), None, None)
 
-    with open(f'{save}/camera_matrix.pkl', wb) as f:
-        pickle.dump(cameraMatrix, cameraMatrix)
-    with open(f'{save}/dist_coeffs.pkl', wb) as f:
-        pickle.dump(cameraMatrix, distCoeffs)
-    with open(f'{save}/rvecs.pkl', wb) as f:
-        pickle.dump(cameraMatrix, rvecs)
-    with open(f'{save}/tvecs.pkl', wb) as f:
-        pickle.dump(cameraMatrix, tvecs)
+    with open(f'{save}/camera_matrix.pkl', 'wb') as f:
+        pickle.dump(cameraMatrix, f)
+    with open(f'{save}/dist_coeffs.pkl', 'wb') as f:
+        pickle.dump(distCoeffs, f)
+    with open(f'{save}/rvecs.pkl', 'wb') as f:
+        pickle.dump(rvecs, f)
+    with open(f'{save}/tvecs.pkl', 'wb') as f:
+        pickle.dump(tvecs, f)
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(
                     prog='Camera calibration',
-                    description='Tool to calibrate a single acamera given as argument')
+                    description='Tool to calibrate a single camera given as argument')
     
     parser.add_argument(
         '-d',
@@ -98,10 +101,35 @@ if __name__ == '__main__':
         help='A custom name to identify the device',
         required=True
     )
+    parser.add_argument(
+        '-r',
+        '--rows',
+        type=int,
+        help='Number of checkerboard rows -1',
+        required=True
+    )
+    parser.add_argument(
+        '-c',
+        '--columns',
+        type=int,
+        help='Number of checkerboard columns -1',
+        required=True
+    )
+    parser.add_argument(
+        '-s',
+        '--size',
+        type=float,
+        help='Real world square size',
+        default=1.
+    )
 
     args = parser.parse_args()
     device = args.device
     name = args.name
+    rows = args.rows
+    columns = args.columns
 
-    capture_images(device, name)
-    calibration()
+    #capture_images(device, name)
+    calibration(name, rows, columns)
+
+    print(f'Calibration matrices have been saved for {device}')
