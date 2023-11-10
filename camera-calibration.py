@@ -113,6 +113,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '-d',
         '--device',
+        type=int,
         help='The device you want to calibrate (e.g., camera name or identifier)',
         required=True
     )

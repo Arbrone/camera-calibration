@@ -41,9 +41,10 @@ def capture_images(left_camera, right_camera):
         retR, frameR = capR.read()
 
         if retL and retR:
-            height, width = frameL.shape
+            height, width = frameL.shape[:2]
             stacked = np.hstack((frameL,frameR))
-            cv2.imshow('frame', cv2.resize(stacked,(width//2,height//2))) 
+            #cv2.imshow('frame', cv2.resize(stacked,(width//2,height//2))) 
+            cv2.imshow('frame', stacked)
             key = cv2.waitKey(1)
 
             # 'q' and 'esc' are used to quit
@@ -142,11 +143,13 @@ if __name__ == '__main__':
     parser.add_argument(
         '-l',
         '--left',
+        type=int,
         required=True
     )
     parser.add_argument(
         '-r',
         '--right',
+        type=int,
         required=True
     )
     parser.add_argument(
@@ -175,5 +178,5 @@ if __name__ == '__main__':
     rows = args.rows
     columns = args.columns
 
-    #capture_images(left_camera, right_camera)
+    capture_images(left_camera, right_camera)
     calibration('stereo', rows, columns)
