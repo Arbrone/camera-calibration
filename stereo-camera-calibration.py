@@ -5,8 +5,9 @@ import numpy as np
 import glob
 import pickle
 
+
 def capture_images(left_camera, right_camera):
-    save = f'images/{name}'
+    save = f'images/stereo'
     if not os._exists(save):
         os.makedirs(save,exist_ok=True)
 
@@ -19,13 +20,14 @@ def capture_images(left_camera, right_camera):
         retR, frameR = capR.read()
 
         if retL and retR:
+            height, width = frameL.shape
             stacked = np.hstack((frameL,frameR))
-            cv2.imshow('frame', frame) 
+            cv2.imshow('frame', cv2.resize(stacked,(width//2,height//2))) 
             key = cv2.waitKey(1)
 
             # 'q' and 'esc' are used to quit
             if key & 0xFF in [ord('q'), 27]:
-                if len(os.listdir(save)) < 10:
+                if cpt < 10:
                     print('At least 10 images are required')
                 else:
                     break
@@ -41,14 +43,6 @@ def capture_images(left_camera, right_camera):
     capR.release() 
     # Destroy all the windows 
     cv2.destroyAllWindows()
-
-def get_corners(fname, rows, columns):
-    img = cv2.imread(fname)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Find the chess board corners
-    # ret, corners
-    return cv2.findChessboardCorners(gray, (rows,columns), None)
 
 
 def calibration(name, rows, columns):
@@ -73,33 +67,50 @@ def calibration(name, rows, columns):
     imagesL = sorted(glob.glob(f'./images/stereo/left/*'))
     imagesR = sorted(glob.glob(f'./images/stereo/right/*'))
 
-    height,weidth = 0,0
+    height,width = 0,0
     for fnameL, fnameR in zip(imagesL, imagesR):
-        h,w = grayL.shape
-        retL, cornersL = get_corners(fnameL, rows, columns)
-        retR, cornersR = get_corners(fnameL, rows, columns)
+        imgL = cv2.imread(fnameL)
+        grayL = cv2.cvtColor(imgL, cv2.COLOR_BGR2GRAY)
+        retL, cornersL = cv2.findChessboardCorners(grayL, (rows,columns), None)
+
+        height, width = grayL.shape
+
+        imgR = cv2.imread(fnameR)
+        grayR = cv2.cvtColor(imgR, cv2.COLOR_BGR2GRAY)
+        retR, cornersR = cv2.findChessboardCorners(grayR, (rows,columns), None)
         
         # If found, add object points, image points (after refining them)
         if retL == True and retR == True:
             objpoints.append(objp)
-            corners2 = cv2.cornerSubPix(gray,corners, (11,11), (-1,-1), criteria)
-            imgpoints.append(corners2)
+            cornersL = cv2.cornerSubPix(grayL,cornersL, (11,11), (-1,-1), criteria)
+            imgpointsL.append(cornersL)
+
+            cornersR = cv2.cornerSubPix(grayL,cornersR, (11,11), (-1,-1), criteria)
+            imgpointsR.append(cornersR)
+
             # Draw and display the corners
-            cv2.drawChessboardCorners(img, (rows,columns), corners2, ret)
+            cv2.drawChessboardCorners(imgL, (rows,columns), cornersL, retL)
+            cv2.drawChessboardCorners(imgR, (rows,columns), cornersR, retR)
+            img = np.hstack((cv2.resize(imgL,(width//2,height//2)), cv2.resize(imgR,(width//2,height//2))))
             cv2.imshow('img', img)
             cv2.waitKey(500)
     cv2.destroyAllWindows()
 
-    retval, cameraMatrix, distCoeffs, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, (h,w), None, None)
+    with open('./calibration/D2/camera_matrix.pkl', 'rb') as f:
+        mtxL = pickle.load(f)
+    with open('./calibration/D2/dist_coeffs.pkl', 'rb') as f:
+        distL = pickle.load(f)
+    with open('./calibration/J2/camera_matrix.pkl', 'rb') as f:
+        mtxR = pickle.load(f)
+    with open('./calibration/J2/dist_coeffs.pkl', 'rb') as f:
+        distR = pickle.load(f)
 
-    with open(f'{save}/camera_matrix.pkl', 'wb') as f:
-        pickle.dump(cameraMatrix, f)
-    with open(f'{save}/dist_coeffs.pkl', 'wb') as f:
-        pickle.dump(distCoeffs, f)
-    with open(f'{save}/rvecs.pkl', 'wb') as f:
-        pickle.dump(rvecs, f)
-    with open(f'{save}/tvecs.pkl', 'wb') as f:
-        pickle.dump(tvecs, f)
+    stereocalibration_flags = cv2.CALIB_FIX_INTRINSIC
+    ret, CM1, dist1, CM2, dist2, R, T, E, F = cv2.stereoCalibrate(objpoints, imgpointsL, imgpointsR, mtxL, distL,
+                                                                 mtxR, distR, (width, height), criteria = criteria, flags = stereocalibration_flags)
+
+    print(R)
+    print(T)
 
 if __name__ == '__main__':
 
@@ -140,6 +151,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     left_camera = args.left
     right_camera = args.right
+    rows = args.rows
+    columns = args.columns
 
     #capture_images(left_camera, right_camera)
-    #calibration(name, rows, columns)
+    calibration('stereo', rows, columns)
