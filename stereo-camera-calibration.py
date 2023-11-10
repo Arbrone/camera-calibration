@@ -6,13 +6,34 @@ import glob
 import pickle
 
 
+def gstreamer_pipeline(sensor_id=0, capture_width=1280,capture_height=720,display_width=640,display_height=360,framerate=60,flip_method=0):
+    return (
+        "nvarguscamerasrc sensor-id=%d ! "
+        "video/x-raw(memory:NVMM), "
+        "width=(int)%d, height=(int)%d, "
+        "format=(string)NV12, framerate=(fraction)%d/1 ! "
+        "nvvidconv flip-method=%d ! "
+        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
+        "videoconvert ! "
+        "video/x-raw, format=(string)BGR ! appsink"
+        % (
+            sensor_id,
+            capture_width,                        
+            capture_height,
+            framerate,
+            flip_method,
+            display_width,
+            display_height,
+        )
+    )
+
 def capture_images(left_camera, right_camera):
     save = f'images/stereo'
     if not os._exists(save):
         os.makedirs(save,exist_ok=True)
 
-    capL = cv2.VideoCapture(left_camera)
-    capR = cv2.VideoCapture(right_camera)
+    capL = cv2.VideoCapture(gstreamer_pipeline(sensor_id=left_camera,flip_method=2), cv2.CAP_GSTREAMER)
+    capR = cv2.VideoCapture(gstreamer_pipeline(sensor_id=right_camera,flip_method=2), cv2.CAP_GSTREAMER)
     cpt = 0
     
     while(True): 
@@ -20,9 +41,10 @@ def capture_images(left_camera, right_camera):
         retR, frameR = capR.read()
 
         if retL and retR:
-            height, width = frameL.shape
+            height, width = frameL.shape[:2]
             stacked = np.hstack((frameL,frameR))
-            cv2.imshow('frame', cv2.resize(stacked,(width//2,height//2))) 
+            #cv2.imshow('frame', cv2.resize(stacked,(width//2,height//2))) 
+            cv2.imshow('frame', stacked)
             key = cv2.waitKey(1)
 
             # 'q' and 'esc' are used to quit
@@ -121,11 +143,13 @@ if __name__ == '__main__':
     parser.add_argument(
         '-l',
         '--left',
+        type=int,
         required=True
     )
     parser.add_argument(
         '-r',
         '--right',
+        type=int,
         required=True
     )
     parser.add_argument(
@@ -154,5 +178,5 @@ if __name__ == '__main__':
     rows = args.rows
     columns = args.columns
 
-    #capture_images(left_camera, right_camera)
+    capture_images(left_camera, right_camera)
     calibration('stereo', rows, columns)

@@ -5,12 +5,33 @@ import numpy as np
 import glob
 import pickle
 
+def gstreamer_pipeline(sensor_id=0, capture_width=1280,capture_height=720,display_width=640,display_height=360,framerate=60,flip_method=0):
+    return (
+        "nvarguscamerasrc sensor-id=%d ! "
+        "video/x-raw(memory:NVMM), "
+        "width=(int)%d, height=(int)%d, "
+        "format=(string)NV12, framerate=(fraction)%d/1 ! "
+        "nvvidconv flip-method=%d ! "
+        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
+        "videoconvert ! "
+        "video/x-raw, format=(string)BGR ! appsink"
+        % (
+            sensor_id,
+            capture_width,                        
+            capture_height,
+            framerate,
+            flip_method,
+            display_width,
+            display_height,
+        )
+    )
+
 def capture_images(device, name):
     save = f'images/{name}'
     if not os._exists(save):
         os.makedirs(save,exist_ok=True)
 
-    cap = cv2.VideoCapture(device)
+    cap = cv2.VideoCapture(gstreamer_pipeline(sensor_id=device,flip_method=2), cv2.CAP_GSTREAMER)
     cpt = 0
     
     while(True): 
@@ -92,6 +113,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '-d',
         '--device',
+        type=int,
         help='The device you want to calibrate (e.g., camera name or identifier)',
         required=True
     )
@@ -129,7 +151,7 @@ if __name__ == '__main__':
     rows = args.rows
     columns = args.columns
 
-    #capture_images(device, name)
+    capture_images(device, name)
     calibration(name, rows, columns)
 
     print(f'Calibration matrices have been saved for {device}')
