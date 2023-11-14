@@ -3,39 +3,21 @@ import os
 import argparse
 import numpy as np
 import glob
-import pickle
+import json
+from camera import Camera
+from pprint import pprint #TODO : remove import
 
-def gstreamer_pipeline(sensor_id=0, capture_width=1280,capture_height=720,display_width=640,display_height=360,framerate=60,flip_method=0):
-    return (
-        "nvarguscamerasrc sensor-id=%d ! "
-        "video/x-raw(memory:NVMM), "
-        "width=(int)%d, height=(int)%d, "
-        "format=(string)NV12, framerate=(fraction)%d/1 ! "
-        "nvvidconv flip-method=%d ! "
-        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
-        "videoconvert ! "
-        "video/x-raw, format=(string)BGR ! appsink"
-        % (
-            sensor_id,
-            capture_width,                        
-            capture_height,
-            framerate,
-            flip_method,
-            display_width,
-            display_height,
-        )
-    )
 
 def capture_images(device, name):
     save = f'images/{name}'
     if not os._exists(save):
         os.makedirs(save,exist_ok=True)
 
-    cap = cv2.VideoCapture(gstreamer_pipeline(sensor_id=device,flip_method=2), cv2.CAP_GSTREAMER)
+    cap = Camera(device, flip_method=2)
     cpt = 0
     
     while(True): 
-        ret, frame = cap.read() 
+        frame = cap.get_frame()
         cv2.imshow('frame', frame) 
         key = cv2.waitKey(1)
 
@@ -95,14 +77,27 @@ def calibration(name, rows, columns):
 
     retval, cameraMatrix, distCoeffs, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, (height,width), None, None)
 
-    with open(f'{save}/camera_matrix.pkl', 'wb') as f:
-        pickle.dump(cameraMatrix, f)
-    with open(f'{save}/dist_coeffs.pkl', 'wb') as f:
-        pickle.dump(distCoeffs, f)
-    with open(f'{save}/rvecs.pkl', 'wb') as f:
-        pickle.dump(rvecs, f)
-    with open(f'{save}/tvecs.pkl', 'wb') as f:
-        pickle.dump(tvecs, f)
+    intrinsic_parameters = {
+        'camera_matrix': cameraMatrix.tolist(),
+        'distortion_coefficients': distCoeffs.tolist()
+    }
+    #pprint(intrinsic_parameters)
+
+    #TODO : remove [0] when camera will be stable
+    extrinsic_parameters = {
+        'rotation_vector': rvecs[0].tolist(), #cv2.Rodrigues() to convert rotation vector (1,3) to rotation matrix (3,3)
+        'translation_vector': tvecs[0].tolist()
+    }
+    pprint(extrinsic_parameters)
+    
+    projection_matrix = np.dot(intrinsic_parameters['camera_matrix'], 
+                               np.hstack((extrinsic_parameters['rotation_vector'], extrinsic_parameters['translation_vector']))).tolist()
+    pprint(projection_matrix)
+
+    with open(f'./calibration/{name}/calibration_parameters.json', 'w') as file:
+        json.dump({'intrinsic': intrinsic_parameters, 
+                   'extrinsic': extrinsic_parameters,
+                   'projection' : projection_matrix}, file)
 
 if __name__ == '__main__':
 
@@ -151,7 +146,7 @@ if __name__ == '__main__':
     rows = args.rows
     columns = args.columns
 
-    capture_images(device, name)
+    #capture_images(device, name)
     calibration(name, rows, columns)
 
     print(f'Calibration matrices have been saved for {device}')

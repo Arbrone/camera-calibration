@@ -4,61 +4,40 @@ import argparse
 import numpy as np
 import glob
 import pickle
-
-
-def gstreamer_pipeline(sensor_id=0, capture_width=1280,capture_height=720,display_width=640,display_height=360,framerate=60,flip_method=0):
-    return (
-        "nvarguscamerasrc sensor-id=%d ! "
-        "video/x-raw(memory:NVMM), "
-        "width=(int)%d, height=(int)%d, "
-        "format=(string)NV12, framerate=(fraction)%d/1 ! "
-        "nvvidconv flip-method=%d ! "
-        "video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! "
-        "videoconvert ! "
-        "video/x-raw, format=(string)BGR ! appsink"
-        % (
-            sensor_id,
-            capture_width,                        
-            capture_height,
-            framerate,
-            flip_method,
-            display_width,
-            display_height,
-        )
-    )
+from camera import Camera
+import json
 
 def capture_images(left_camera, right_camera):
     save = f'images/stereo'
     if not os._exists(save):
         os.makedirs(save,exist_ok=True)
 
-    capL = cv2.VideoCapture(gstreamer_pipeline(sensor_id=left_camera,flip_method=2), cv2.CAP_GSTREAMER)
-    capR = cv2.VideoCapture(gstreamer_pipeline(sensor_id=right_camera,flip_method=2), cv2.CAP_GSTREAMER)
+    capL = Camera(sensor_id=left_camera,flip_method=2)
+    capR = Camera(sensor_id=right_camera,flip_method=2)
     cpt = 0
     
     while(True): 
-        retL, frameL = capL.read()
-        retR, frameR = capR.read()
+        frameL = capL.get_frame()
+        frameR = capR.get_frame()
 
-        if retL and retR:
-            height, width = frameL.shape[:2]
-            stacked = np.hstack((frameL,frameR))
-            #cv2.imshow('frame', cv2.resize(stacked,(width//2,height//2))) 
-            cv2.imshow('frame', stacked)
-            key = cv2.waitKey(1)
+        height, width = frameL.shape[:2]
+        stacked = np.hstack((frameL,frameR))
+        #cv2.imshow('frame', cv2.resize(stacked,(width//2,height//2))) 
+        cv2.imshow('frame', stacked)
+        key = cv2.waitKey(1)
 
-            # 'q' and 'esc' are used to quit
-            if key & 0xFF in [ord('q'), 27]:
-                if cpt < 10:
-                    print('At least 10 images are required')
-                else:
-                    break
-            # 'enter' is used to saved current frame
-            if key & 0xFF == 13: 
-                cv2.imwrite(f'images/stereo/left/{cpt}.jpg', frameL)
-                cv2.imwrite(f'images/stereo/right/{cpt}.jpg', frameR)
-                print('images saved')
-                cpt+=1
+        # 'q' and 'esc' are used to quit
+        if key & 0xFF in [ord('q'), 27]:
+            if cpt < 10:
+                print('At least 10 images are required')
+            else:
+                break
+        # 'enter' is used to saved current frame
+        if key & 0xFF == 13: 
+            cv2.imwrite(f'images/stereo/left/{cpt}.jpg', frameL)
+            cv2.imwrite(f'images/stereo/right/{cpt}.jpg', frameR)
+            print('images saved')
+            cpt+=1
     
     # After the loop release the cap objects
     capL.release() 
@@ -118,21 +97,30 @@ def calibration(name, rows, columns):
             cv2.waitKey(500)
     cv2.destroyAllWindows()
 
-    with open('./calibration/D2/camera_matrix.pkl', 'rb') as f:
-        mtxL = pickle.load(f)
-    with open('./calibration/D2/dist_coeffs.pkl', 'rb') as f:
-        distL = pickle.load(f)
-    with open('./calibration/J2/camera_matrix.pkl', 'rb') as f:
-        mtxR = pickle.load(f)
-    with open('./calibration/J2/dist_coeffs.pkl', 'rb') as f:
-        distR = pickle.load(f)
+    with open('./calibration/left/calibration_parameters.json', 'r') as file:
+        data = file.load()
+        mtxL = data['intrinsic_parameters']['camera_matrix']
+        distL = data['intrinsic_parameters']['distortion_coefficients']
+
+    with open('./calibration/right/calibration_parameters.json', 'r') as file:
+        data = file.load()
+        mtxR = data['intrinsic_parameters']['camera_matrix']
+        distR = data['intrinsic_parameters']['distortion_coefficients']
+
 
     stereocalibration_flags = cv2.CALIB_FIX_INTRINSIC
     ret, CM1, dist1, CM2, dist2, R, T, E, F = cv2.stereoCalibrate(objpoints, imgpointsL, imgpointsR, mtxL, distL,
                                                                  mtxR, distR, (width, height), criteria = criteria, flags = stereocalibration_flags)
 
-    print(R)
-    print(T)
+    with open('./calibration/stereo/calibration_parameters.json', 'w') as file:
+        json.dump({'camera_left': {'camera_matrix': CM1,
+                                   'distortion_coefficients':dist1}, 
+                   'camera_right': {'camera_matrix': CM2,
+                                    'distortion_coefficients':dist2},
+                   'rotation' : R,
+                   'translation':T,
+                   'essential':E,
+                   'fundamental':F}, file)
 
 if __name__ == '__main__':
 
