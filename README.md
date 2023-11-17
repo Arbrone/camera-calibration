@@ -6,7 +6,6 @@ This repository contains Python scripts for camera calibration. It provides two 
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
 - [Usage](#usage)
-- [License](#license)
 
 ## Prerequisites
 
@@ -46,7 +45,7 @@ To calibrate a single camera, use the camera-calibration.py script. It requires 
 **Example usage**:
 
 ```bash
-python camera-calibration.py -d my_camera -n MyCamera
+python camera-calibration.py -d my_camera -n MyCamera --rows n --columns n
 ```
 
 ## Stereo Camera Calibration
@@ -56,5 +55,5 @@ To calibrate a stereo camera setup, use the stereo-camera-calibration.py script.
 **Example usage**:
 
 ```bash
-python stereo-camera-calibration.py -d left_camera -n LeftCamera -d right_camera -n RightCamera
+python stereo-camera-calibration.py --left lef_cam --right right_cam --rows n --columns n
 ```
